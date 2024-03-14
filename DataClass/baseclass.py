@@ -5,9 +5,10 @@
 __author__ = "mosyan4ik"
 
 import json
-from dataclasses import dataclass, asdict
+from collections import OrderedDict
+from dataclasses import dataclass, asdict, field
 from datetime import datetime, date
-from typing import Optional, List, ForwardRef
+from typing import Optional, List, ForwardRef, Union
 
 
 @dataclass
@@ -106,16 +107,17 @@ class Resources:
 @dataclass
 class Dependency:
     fromEvent: str
-    _from: str
+    # from: str
     toEvent: str
     to: str
     lag: int
     lagUnit: date
     type: int
-    active: bool
+
     guid: str
     id: str
 
+    active: Optional[bool] = None
 
 @dataclass
 class Dependencies:
@@ -127,8 +129,8 @@ class Dependencies:
 
 @dataclass
 class Task:
-    parentId: Optional[str]
-    children: Optional[List[ForwardRef("Task")]]
+
+
     name: str
     startDate: datetime
     endDate: datetime
@@ -142,17 +144,30 @@ class Task:
     effortDriven: bool
     parentIndex: int
     expanded: bool
-    rollup: bool
+
     inactive: bool
-    critical: Optional[bool]
+
     rootTask: bool
     priority: int
     assignmentsUnitsSum: int
     guid: str
     id: str
 
+    # первая строчка
+    parentId: Optional[str] = None
+    #вместо первого пропуска
+    rollup: Optional[bool] = None
+    #вместо второго пропуска
+    critical: Optional[bool] = None
+
+    constraintType: Optional[str] = None
+    constraintDate: Optional[datetime] = None
+
+    children: Optional[List[ForwardRef("Task")]] = None
+
     def __post_init__(self):
         self.children = self.children and [Task(**child) for child in self.children]
+        self.rollup = self.rollup and False
 
 
 @dataclass
@@ -208,3 +223,34 @@ class Document:
 
     def to_json(self):
         return json.dumps(asdict(self), indent=4)
+
+    def output_json(self):
+        with open('output.json', 'w') as f:
+            json.dump(asdict(self), f, indent=4, ensure_ascii=False)
+
+
+class Timeline(OrderedDict):
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self.move_to_end(key)
+
+
+class Worker(Resource):
+    cost = None
+    timeline = None
+    total_cost = 0
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.get_cost()
+        self.timeline = Timeline()
+
+    def get_cost(self):
+        cost_start_index = self.name.find('(')
+        cost_end_index = self.name.find('руб/час')
+        cost_substring = self.name[cost_start_index + 1:cost_end_index]
+        if cost_substring.isnumeric():
+            cost = int(cost_substring)
+            self.cost = cost
+        else:
+            print('wrong slice for resource price check')
